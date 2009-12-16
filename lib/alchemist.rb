@@ -244,19 +244,22 @@ module Alchemist
     },
     :temperature => {
       :kelvin => 1.0, :K => 1.0,
-      :celsius => [Proc.new{ |t| t + 273.15 }, Proc.new{ |t| t - 273.15 }], :centrigrade => [Proc.new{ |t| t + 273.15 }, Proc.new{ |t| t - 273.15 }],
-      :degree_celsius => [Proc.new{ |t| t + 273.15 }, Proc.new{ |t| t - 273.15 }], :degree_centrigrade => [Proc.new{ |t| t + 273.15 }, Proc.new{ |t| t - 273.15 }],
-      :degrees_celsius => [Proc.new{ |t| t + 273.15 }, Proc.new{ |t| t - 273.15 }], :degrees_centrigrade => [Proc.new{ |t| t + 273.15 }, Proc.new{ |t| t - 273.15 }],
-      :fahrenheit => [Proc.new{ |t| t * (5.0/9.0) + 459.67 }, Proc.new{ |t| t * (9.0/5.0) - 459.67 }],
-      :degree_fahrenheit => [Proc.new{ |t| t * (5.0/9.0) + 459.67 }, Proc.new{ |t| t * (9.0/5.0) - 459.67 }],
-      :degrees_fahrenheit => [Proc.new{ |t| t * (5.0/9.0) + 459.67 }, Proc.new{ |t| t * (9.0/5.0) - 459.67 }],
+      :celsius => [Proc.new{ |t| t + 273 }, Proc.new{ |t| t - 273 }],
+      :centigrade => [Proc.new{ |t| t + 273 }, Proc.new{ |t| t - 273 }],
+      :degree_celsius => [Proc.new{ |t| t + 273 }, Proc.new{ |t| t - 273 }],
+      :degree_centigrade => [Proc.new{ |t| t + 273.15 }, Proc.new{ |t| t - 273 }],
+      :degrees_celsius => [Proc.new{ |t| t + 273 }, Proc.new{ |t| t - 273 }],
+      :degrees_centigrade => [Proc.new{ |t| t + 273.15 }, Proc.new{ |t| t - 273 }],
+      :fahrenheit => [Proc.new{ |t| 5.0/9 * (t - 32) + 273 }, Proc.new{ |t| (t - 273) * 1.8 + 32 }],
+      :degree_fahrenheit => [Proc.new{ |t| (t - 32) * (5.0/9) + 273 }, Proc.new{ |t| (t - 32) * 1.8 - 273 }],
+      :degrees_fahrenheit => [Proc.new{ |t| (t - 32) * (5.0/9) + 273 }, Proc.new{ |t| (t - 32) * 1.8 - 273 }],
       :rankine => 1.8, :rankines => 1.8
     }, 
     :time => {
       :second => 1.0, :seconds => 1.0, :s => 1.0,
       :minute => 60.0, :minutes => 60.0, :min => 60.0,
       :sidereal_minute => 5.983617, :sidereal_minutes => 5.983617,
-      :hour => 3600.0, :hours => 3600.0, :hr => 3600.0, :h => 3600.0,
+      :hour => 3600.0, :hours => 3600.0, :hr => 3600.0,
       :sidereal_hour => 3.590170e+3, :sidereal_hours => 3.590170e+3,
       :day => 86400.0, :days => 86400.0,
       :sidereal_day => 8.616409e+4, :sidereal_days => 8.616409e+4,
@@ -343,68 +346,8 @@ module Alchemist
     @@operator_actions
   end
   
-  class CompoundNumericConversion
-    attr_accessor :numerators, :denominators
-    def initialize(numerator)
-      @coefficient = 1 #* numerator.to_f
-      @numerators = [numerator]
-      @denominators = []
-    end
-    def *(value)
-      case value
-      when Numeric 
-         @coefficient *= value
-         self
-      when Alchemist::NumericConversion
-        @numerators << value
-        return consolidate
-      end
-    end
-    
-    def consolidate
-      @numerators.each_with_index do |numerator, n|
-        @denominators.each_with_index do |denominator, d|
-          next if numerator.is_a?(Numeric)
-          next if denominator.is_a?(Numeric)
-          if (Conversions[numerator.unit_name] & Conversions[denominator.unit_name]).length > 0
-            value = numerator / denominator
-            @numerators.delete_at(n)
-            @denominators.delete_at(d)
-            @coefficient *= value
-          end
-        end
-      end
-      if @denominators.length == 0 && @numerators.length == 1
-        @numerators[0] * @coefficient
-      elsif @denominators.length == 0 && @numerators.length == 0
-        @coefficient
-      else
-        self
-      end
-    end
-    
-    def to_s
-      
-    end
-    
-    def method_missing(method, *attrs, &block)
-      if Conversions[method]
-        @denominators << 1.send(method)
-        consolidate
-      end
-    end
-  end
-  
   class NumericConversion
     include Comparable
-    
-    def per
-      Alchemist::CompoundNumericConversion.new(self)
-    end
-    
-    def p
-      per
-    end
     
     def to(type = nil)
       unless type
@@ -429,10 +372,6 @@ module Alchemist
     
     def to_s
       @value.to_s
-    end
-    
-    def value
-      @value
     end
     
     def to_f
@@ -473,14 +412,7 @@ module Alchemist
             end
           end
         end
-        if unit_name == :*
-          if args[0].is_a?(Numeric)
-            @value *= args[0]
-            return self
-          else
-            raise Exception, "Incompatible Types"
-          end
-        end
+        raise Exception, "Incompatible Types" if unit_name == :*
         if unit_name == :/ && args[0].is_a?(NumericConversion)
           raise Exception, "Incompatible Types" unless (Conversions[@unit_name] & Conversions[args[0].unit_name]).length > 0  
         end
